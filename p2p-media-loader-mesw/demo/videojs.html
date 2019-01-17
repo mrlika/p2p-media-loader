@@ -48,7 +48,7 @@
             var source = "https://wowza.peer5.com/live/smil:bbb_abr.smil/playlist.m3u8";
 
             var engine = new p2pml.mesw.Engine();
-            engine.init(document.getElementById("video"), source);
+            engine.init(player.el().querySelector("video"), source);
 
             player.src({
                 src: source,
