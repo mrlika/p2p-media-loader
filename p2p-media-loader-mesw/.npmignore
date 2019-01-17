@@ -1,0 +1,10 @@
+tsconfig.json
+tsconfig.test.json
+tsconfig.tslint.json
+tslint.json
+lib
+test
+.editorconfig
+demo
+webpackfile.js
+*.tgz
