@@ -50,6 +50,12 @@ export class Engine extends EventEmitter {
         };
     }
 
+    public getDetails(): any {
+        return {
+            loader: this.loader.getDetails()
+        };
+    }
+
     public init(mediaElement: HTMLMediaElement, streamUrl: string) {
     }
 
