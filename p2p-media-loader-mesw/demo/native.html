@@ -37,21 +37,37 @@
     <video id="video" autoplay controls muted playsinline></video>
 
     <script>
+        window.addEventListener('load', async function() {
+            if (!p2pml.mesw.Engine.isSupported()) {
+                document.write("Not supported :(");
+                return;
+            }
 
-        if (p2pml.mesw.Engine.isSupported()) {
-            var video = document.getElementById("video");
+            const video = document.getElementById("video");
+            const source = "https://wowza.peer5.com/live/smil:bbb_abr.smil/playlist.m3u8";
+            //const source = "https://akamai-axtest.akamaized.net/routes/lapd-v1-acceptance/www_c4/Manifest.m3u8";
+            const engine = new p2pml.mesw.Engine();
 
-            //var source = "https://akamai-axtest.akamaized.net/routes/lapd-v1-acceptance/www_c4/Manifest.m3u8";
-            var source = "https://wowza.peer5.com/live/smil:bbb_abr.smil/playlist.m3u8";
+            let registration;
 
-            var engine = new p2pml.mesw.Engine();
-            engine.init(video, source);
+            try {
+                registration = await navigator.serviceWorker.register("p2p-media-loader-mesw-service-worker.js");
+
+                if (registration.active) {
+                    registration = await registration.update();
+                }
+            } catch (e) {
+                document.write(`Service worker registration failed: ${e}`);
+                return;
+            }
+
+            const serviceWorker = registration.installing ? registration.installing : registration.active;
+            const isActive = (serviceWorker === registration.active);
+
+            await engine.init(video, source, serviceWorker, isActive);
 
             video.src = source;
-        } else {
-            document.write("Not supported :(");
-        }
-
+        });
     </script>
 
 </body>

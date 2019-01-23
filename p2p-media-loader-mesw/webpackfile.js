@@ -34,7 +34,42 @@ function makeConfig({libName, entry, mode}) {
     }
 };
 
+function makeConfigForServiceWorker({libName, entry, mode}) {
+    return {
+        mode,
+        entry,
+        resolve: {
+          // Add `.ts` as a resolvable extension.
+          extensions: [".ts", ".js"]
+        },
+        module: {
+          rules: [
+            // all files with a `.ts` extension will be handled by `ts-loader`
+            {
+                test: /\.ts?$/,
+                exclude: [/node_modules/],
+                loader: "ts-loader",
+                options: {
+                    configFile: "tsconfig.sw.json"
+                }
+            },
+          ]
+        },
+        output: {
+            filename: libName + ".js",
+            path: path.resolve(__dirname, OUTPUT_PATH)
+        },
+        plugins: [
+            new webpack.DefinePlugin({
+                __P2PML_VERSION__: JSON.stringify(require("./package.json").version)
+            })
+        ]
+    }
+};
+
 module.exports = [
     makeConfig({entry: "./lib/browser-init-webpack.js", mode: "development", libName: "p2p-media-loader-mesw", }),
-    makeConfig({entry: "./lib/browser-init-webpack.js", mode: "production", libName: "p2p-media-loader-mesw.min"})
+    makeConfig({entry: "./lib/browser-init-webpack.js", mode: "production", libName: "p2p-media-loader-mesw.min"}),
+    makeConfigForServiceWorker({entry: "./lib_sw/service-worker.ts", mode: "development", libName: "p2p-media-loader-mesw-service-worker", }),
+    makeConfigForServiceWorker({entry: "./lib_sw/service-worker.ts", mode: "production", libName: "p2p-media-loader-mesw-service-worker.min"})
 ];

@@ -1,8 +1,10 @@
 tsconfig.json
 tsconfig.test.json
 tsconfig.tslint.json
+tsconfig.sw.json
 tslint.json
 lib
+lib_sw
 test
 .editorconfig
 demo

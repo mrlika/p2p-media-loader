@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
     "target": "es6",
+    "lib": ["es6", "webworker"],
     "module": "commonjs",
     "strict": true,
     "moduleResolution": "node",
     "declaration": true,
-    "noEmit": true,
+    "outDir": "./dist_sw",
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "strictNullChecks": true,
@@ -16,9 +17,8 @@
     "noImplicitAny": true,
     "types": []
   },
+  "compileOnSave": true,
   "include": [
-    "lib/**/*",
-    "lib_sw/**/*",
-    "test/**/*"
+    "lib_sw/**/*"
   ]
 }

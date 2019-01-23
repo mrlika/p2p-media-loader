@@ -21,12 +21,17 @@
     "service-worker"
   ],
   "scripts": {
-    "compile": "tsc && copyfiles -f ./lib/*.js ./dist",
-    "browserify": "mkdirp ./build && browserify -r ./dist/index.js:p2p-media-loader-mesw ./dist/browser-init.js -x p2p-media-loader-core -x debug -x events > ./build/p2p-media-loader-mesw.js",
-    "minify": "terser ./build/p2p-media-loader-mesw.js -m -c > ./build/p2p-media-loader-mesw.min.js",
+    "compile-lib": "tsc && copyfiles -f ./lib/*.js ./dist",
+    "compile-sw": "tsc --project tsconfig.sw.json",
+    "browserify-lib": "mkdirp ./build && browserify -r ./dist/index.js:p2p-media-loader-mesw ./dist/browser-init.js -x p2p-media-loader-core -x debug -x events > ./build/p2p-media-loader-mesw.js",
+    "browserify-sw": "mkdirp ./build && browserify ./dist_sw/service-worker.js > ./build/p2p-media-loader-mesw-service-worker.js",
+    "minify-lib": "terser ./build/p2p-media-loader-mesw.js -m -c > ./build/p2p-media-loader-mesw.min.js",
+    "minify-sw": "terser ./dist_sw/*.js -m -c > ./build/p2p-media-loader-mesw-service-worker.min.js",
     "webpack:build": "webpack --progress",
     "webpack:watch": "webpack --watch --progress",
-    "build": "npm run compile && npm run browserify && npm run minify",
+    "build-lib": "npm run compile-lib && npm run browserify-lib && npm run minify-lib",
+    "build-sw": "npm run compile-sw && npm run browserify-sw && npm run minify-sw",
+    "build": "npm run build-lib && npm run build-sw",
     "lint": "tslint -c ./tslint.json -p ./tsconfig.tslint.json",
     "test": "TS_NODE_PROJECT=tsconfig.test.json TS_NODE_CACHE=false mocha -r ts-node/register test/*.test.ts"
   },
