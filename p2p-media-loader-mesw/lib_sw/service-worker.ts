@@ -31,7 +31,7 @@ ctx.addEventListener("activate", event => {
                 }
 
                 p2pClient.ready = true;
-                p2pClient.port.postMessage({type: "ready", source: p2pClient.streamUrl, version: VERSION});
+                p2pClient.port.postMessage({type: "ready", streamUrl: p2pClient.streamUrl, version: VERSION});
             }
         });
     }));
@@ -47,19 +47,32 @@ ctx.addEventListener("fetch", async function(event: FetchEvent) {
         return;
     }
 
-    p2pClient.port.postMessage({type: "fetch", url: event.request.url});
+    const url = event.request.url;
+    const urlContext = p2pClient.urlsToTrack.get(url);
+
+    if (!urlContext) {
+        return;
+    }
+
+    p2pClient.port.postMessage({type: "fetch", url: url});
+
+    event.waitUntil(new Promise<Response>((resolve, reject) => {
+        urlContext.resolve = resolve;
+        urlContext.reject = reject;
+    }));
 });
 
 ctx.addEventListener("message", async event => {
     switch (event.data.type) {
     case "init":
         const port = event.ports[0];
-        const p2pClient = new P2PClient(event.data.streamUrl, event.data.isServiceWorkerActive, port);
+        const streamUrl = event.data.streamUrl;
+        const p2pClient = new P2PClient(streamUrl, event.data.isServiceWorkerActive, port);
 
         p2pClients.set((event.source as Client).id, p2pClient);
 
         if (p2pClient.ready) {
-            port.postMessage({type: "ready", source: event.data, version: VERSION});
+            port.postMessage({type: "ready", streamUrl: streamUrl, version: VERSION});
         }
 
         // Remove disconnected clients
@@ -79,6 +92,20 @@ ctx.addEventListener("message", async event => {
     }
 });
 
+class UrlContext {
+    constructor(
+            public url: string,
+            public resolve?: (result: {response?: Response, string}) => void,
+            public reject?: (error?: any) => void) {}
+}
+
 class P2PClient {
-    constructor(readonly streamUrl: string, public ready: boolean, readonly port: MessagePort) {}
+    public urlsToTrack: Map<string, UrlContext> = new Map();
+
+    constructor(
+            readonly streamUrl: string,
+            public ready: boolean,
+            readonly port: MessagePort) {
+        this.urlsToTrack.set(streamUrl, new UrlContext(streamUrl));
+    }
 }
