@@ -26,11 +26,11 @@ ctx.addEventListener("activate", event => {
         ctx.clients.matchAll().then((clients) => {
             for (const client of clients) {
                 const p2pClient = p2pClients.get(client.id);
-                if (!p2pClient || p2pClient.ready) {
+                if (!p2pClient || p2pClient.active) {
                     continue;
                 }
 
-                p2pClient.ready = true;
+                p2pClient.active = true;
                 p2pClient.port.postMessage({type: "ready", streamUrl: p2pClient.streamUrl, version: VERSION});
             }
         });
@@ -48,64 +48,157 @@ ctx.addEventListener("fetch", async function(event: FetchEvent) {
     }
 
     const url = event.request.url;
-    const urlContext = p2pClient.urlsToTrack.get(url);
 
-    if (!urlContext) {
+    if (!p2pClient.isUrlTracking(url)) {
         return;
     }
 
     p2pClient.port.postMessage({type: "fetch", url: url});
 
     event.waitUntil(new Promise<Response>((resolve, reject) => {
-        urlContext.resolve = resolve;
-        urlContext.reject = reject;
+        p2pClient.createUrlRequest(url, resolve, reject);
     }));
 });
 
-ctx.addEventListener("message", async event => {
-    switch (event.data.type) {
+ctx.addEventListener("message", event => {
+    const eventType: string = event.data.type;
+
+    switch (eventType) {
     case "init":
-        const port = event.ports[0];
-        const streamUrl = event.data.streamUrl;
-        const p2pClient = new P2PClient(streamUrl, event.data.isServiceWorkerActive, port);
+        processInitMessage(event);
+        break;
 
-        p2pClients.set((event.source as Client).id, p2pClient);
-
-        if (p2pClient.ready) {
-            port.postMessage({type: "ready", streamUrl: streamUrl, version: VERSION});
-        }
-
-        // Remove disconnected clients
-        const clients = await ctx.clients.matchAll();
-
-        for (const [id, p2pClient] of p2pClients) {
-            if (!p2pClient.ready) {
-                continue;
-            }
-
-            const client = clients.find(client => client.id === id);
-            if (!client) {
-                p2pClients.delete(id);
-            }
-        }
+    case "fetched":
+        processFetchedMessage(event);
         break;
     }
 });
 
-class UrlContext {
+async function processInitMessage(event: ExtendableMessageEvent) {
+    const port = event.ports[0];
+    const streamUrl: string = event.data.streamUrl;
+    const isServiceWorkerActive: boolean = event.data.isServiceWorkerActive;
+    const p2pClient = new P2PClient(streamUrl, isServiceWorkerActive, port);
+
+    p2pClients.set((event.source as Client).id, p2pClient);
+
+    if (p2pClient.active) {
+        port.postMessage({type: "ready", streamUrl: streamUrl, version: VERSION});
+    }
+
+    // Remove disconnected clients
+    const clients = await ctx.clients.matchAll();
+
+    for (const [id, p2pClient] of p2pClients) {
+        if (!p2pClient.active) {
+            continue;
+        }
+
+        const client = clients.find(client => client.id === id);
+        if (!client) {
+            p2pClients.delete(id);
+        }
+    }
+}
+
+function processFetchedMessage(event: ExtendableMessageEvent) {
+    const url: string = event.data.url;
+    const manifestChildUrls: Set<string> | undefined = event.data.manifestChildUrls;
+
+    const p2pClient = p2pClients.get((event.source as Client).id);
+    if (!p2pClient) {
+        return;
+    }
+
+    const urlRequest = p2pClient.getUrlRequest(url);
+
+    if (!urlRequest) {
+        return;
+    }
+
+    if (manifestChildUrls) {
+        p2pClient.setManifest(url, manifestChildUrls);
+    }
+
+    const response: Response | undefined = event.data.response;
+
+    if (response) {
+        urlRequest.resolve(response);
+    } else {
+        urlRequest.reject(event.data.error);
+    }
+}
+
+class RequestedUrlContext {
     constructor(
-            public url: string,
-            public resolve?: (result: {response?: Response, string}) => void,
-            public reject?: (error?: any) => void) {}
+            public resolve: (result: Response) => void,
+            public reject: (error?: any) => void) {}
+}
+
+class Manifest {
+    public childUrls: Set<string> = new Set();
 }
 
 class P2PClient {
-    public urlsToTrack: Map<string, UrlContext> = new Map();
+    private manifests: Map<string, Manifest> = new Map;
+    public requestedUrls: Map<string, RequestedUrlContext> = new Map;
 
     constructor(
             readonly streamUrl: string,
-            public ready: boolean,
+            public active: boolean,
             readonly port: MessagePort) {
-        this.urlsToTrack.set(streamUrl, new UrlContext(streamUrl));
+        this.manifests.set(streamUrl, new Manifest);
+    }
+
+    public createUrlRequest(url: string, resolve: typeof RequestedUrlContext.prototype.resolve, reject: typeof RequestedUrlContext.prototype.reject) {
+        this.requestedUrls.set(url, new RequestedUrlContext(resolve, reject));
+    }
+
+    public getUrlRequest(url: string): RequestedUrlContext | undefined {
+        return this.requestedUrls.get(url);
+    }
+
+    public setManifest(url: string, childUrls: Set<string>) {
+        let manifest = this.manifests.get(url);
+
+        if (!manifest) {
+            manifest = new Manifest;
+            this.manifests.set(url, manifest);
+        }
+
+        manifest.childUrls = childUrls;
+
+        if (url === this.streamUrl) {
+            for (const [url, ] of this.manifests) {
+                if (url === this.streamUrl) {
+                    continue;
+                }
+
+                if (!childUrls.has(url)) {
+                    this.manifests.delete(url);
+                }
+            }
+        }
+    }
+
+    public isUrlTracking(url: string,) {
+        if (this.manifests.has(url)) {
+            return true;
+        }
+
+        for (const [, manifest] of this.manifests) {
+            if (manifest.childUrls.has(url)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public destroy() {
+        for (const [, urlContext] of this.requestedUrls) {
+            urlContext.reject(new Error("Client destroyed"));
+        }
+        this.requestedUrls.clear();
     }
 }

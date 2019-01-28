@@ -44,6 +44,7 @@ export class Engine extends EventEmitter {
     public destroy() {
         this.loader.destroy();
         this.segmentManager.destroy();
+        this.rejectInitPromise("Canceled by destroy call");
     }
 
     public getSettings(): any {
@@ -57,6 +58,20 @@ export class Engine extends EventEmitter {
         return {
             loader: this.loader.getDetails()
         };
+    }
+
+    public init(mediaElement: HTMLMediaElement, streamUrl: string, serviceWorker: ServiceWorker, isServiceWorkerActive: boolean): Promise<void> {
+        this.rejectInitPromise("Canceled by subsequent init call");
+
+        this.messageChannel = new MessageChannel();
+        this.messageChannel.port1.onmessage = this.onMessage;
+
+        serviceWorker.postMessage({type: "init", streamUrl, isServiceWorkerActive}, [this.messageChannel.port2]);
+
+        return new Promise<void>((resolve, reject) => {
+            this.initPromiseResolve = resolve;
+            this.initPromiseReject = reject;
+        });
     }
 
     private onMessage = (event: MessageEvent) => {
@@ -80,28 +95,18 @@ export class Engine extends EventEmitter {
     }
 
     private onServiceWorkerFetch(url: string) {
-        console.log(`fetched ${url}`);
+        console.log(`fetch ${url}`);
         const div = document.createElement("div");
         div.innerHTML = url;
         document.body.appendChild(div);
     }
 
-    public init(mediaElement: HTMLMediaElement, streamUrl: string, serviceWorker: ServiceWorker, isServiceWorkerActive: boolean): Promise<void> {
+    private rejectInitPromise(errorMessage: string) {
         if (this.initPromiseReject) {
-            this.initPromiseReject(new Error("Canceled by subsequent init call"));
+            this.initPromiseReject(new Error(errorMessage));
             this.initPromiseReject = undefined;
             this.initPromiseResolve = undefined;
             this.messageChannel = undefined;
         }
-
-        this.messageChannel = new MessageChannel();
-        this.messageChannel.port1.onmessage = this.onMessage;
-
-        serviceWorker.postMessage({type: "init", streamUrl, isServiceWorkerActive}, [this.messageChannel.port2]);
-
-        return new Promise<void>((resolve, reject) => {
-            this.initPromiseResolve = resolve;
-            this.initPromiseReject = reject;
-        });
     }
 }
